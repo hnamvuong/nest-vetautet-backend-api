@@ -1,14 +1,34 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { User } from './entities/user.entity';
 import { DbService } from '../db/db.service';
+import { LoginUserDto } from './dto/login-user.dto';
 
 @Injectable()
 export class UserService {
   @Inject(DbService)
   dbService: DbService;
+
+  async login(loginUserDto: LoginUserDto) {
+    const users: User[] = await this.dbService.read();
+
+    // Check user already
+    const userFound = users.find(
+      (user) => user.account_name === loginUserDto.account_name,
+    );
+
+    if (!userFound) {
+      throw new BadRequestException(`Login failed`);
+    }
+
+    if (userFound.password !== loginUserDto.password) {
+      throw new BadRequestException(`Login failed`);
+    }
+
+    return userFound;
+  }
 
   async register(registerUserDto: RegisterUserDto) {
     const users: User[] = await this.dbService.read();
@@ -19,7 +39,7 @@ export class UserService {
     );
 
     if (userFound) {
-      throw new NotFoundException(
+      throw new BadRequestException(
         `User ${registerUserDto.account_name} already exists`,
       );
     }
