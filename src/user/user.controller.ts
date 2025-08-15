@@ -9,19 +9,103 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UploadedFiles,
+  Query,
+  Res,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { storage } from './oss';
 import * as path from 'node:path';
+import fs from 'node:fs';
+import type { Response } from 'express';
 
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  // Merge image
+  @Get('merge/file')
+  mergeFile(@Query('file') fileName: string, @Res() res: Response) {
+    const nameDir = 'uploads/' + fileName;
+
+    // read file
+    const files = fs.readdirSync(nameDir);
+
+    // merge files
+    let startPos = 0;
+    let countFile = 0;
+    const mergeDir = 'uploads/merge/';
+
+    if (!fs.existsSync(mergeDir)) {
+      fs.mkdirSync(mergeDir);
+    }
+
+    files.map((file) => {
+      const filePath = nameDir + '/' + file;
+      console.log('filePath | ', filePath);
+      const streamFile = fs.createReadStream(filePath);
+      streamFile
+        .pipe(
+          fs.createWriteStream(mergeDir + fileName, {
+            start: startPos,
+          }),
+        )
+        .on('finish', () => {
+          countFile++;
+          console.log('CountFile | ', countFile);
+          if (countFile == files.length) {
+            fs.rm(
+              nameDir,
+              {
+                recursive: true,
+              },
+              () => {},
+            );
+          }
+        });
+
+      startPos += fs.statSync(filePath).size;
+    });
+
+    return res.json({
+      link: `http://localhost:3000/${mergeDir}${fileName}`,
+      fileName,
+    });
+  }
+
+  @Post('upload/large-file')
+  @UseInterceptors(
+    FilesInterceptor('files', 20, {
+      dest: 'uploads',
+    }),
+  )
+  uploadLargeFile(
+    @UploadedFiles() files: Array<Express.Multer.File>,
+    @Body() body: { name: string },
+  ) {
+    console.log('upload file body =>>>', body);
+    console.log('upload files =>>>', files);
+
+    // 1.get name file
+    const fileName = body.name.match(/(.+)-\d+$/)?.[1] ?? body.name;
+    const nameDir = 'uploads/chunks-' + fileName;
+
+    // 2. create folder
+    if (!fs.existsSync(nameDir)) {
+      fs.mkdirSync(nameDir);
+    }
+
+    // 3. Copy file to folder
+    fs.cpSync(files[0].path, nameDir + '/' + body.name);
+
+    // 4. Remove file
+    fs.rmSync(files[0].path);
+  }
 
   @Post('upload/avt')
   @UseInterceptors(
