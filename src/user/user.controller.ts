@@ -23,9 +23,12 @@ import { storage } from './oss';
 import * as path from 'node:path';
 import fs from 'node:fs';
 import type { Response } from 'express';
+import { MyLogger } from '../logger/my.logger';
 
 @Controller('user')
 export class UserController {
+  private logger = new MyLogger();
+
   constructor(private readonly userService: UserService) {}
 
   // Merge image
@@ -138,6 +141,7 @@ export class UserController {
 
   @Post('register')
   register(@Body() registerUserDto: RegisterUserDto) {
+    this.logger.log('registerUserDto | ', registerUserDto.account_name);
     return this.userService.register(registerUserDto);
   }
 
